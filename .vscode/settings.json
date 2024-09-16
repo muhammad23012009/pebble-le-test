@@ -1,0 +1,16 @@
+{
+    "cmake.configureOnOpen": true,
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "files.associations": {
+        "qbluetoothdevicediscoveryagent": "cpp",
+        "qbluetoothuuid": "cpp",
+        "string_view": "cpp",
+        "*.tcc": "cpp",
+        "qrunnable": "cpp",
+        "qlowenergycharacteristic": "cpp",
+        "qlowenergyadvertisingdata": "cpp",
+        "qlowenergyservicedata": "cpp",
+        "cstdlib": "cpp"
+    },
+    "C_Cpp.errorSquiggles": "enabled"
+}
