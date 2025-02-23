@@ -84,6 +84,10 @@ public:
         m_offset += n;
         return QByteArray(u, n);
     }
+    int size()
+    {
+        return m_data.length() - m_offset;
+    }
 
 private:
     QByteArray m_data;

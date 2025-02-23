@@ -23,10 +23,12 @@ add_executable(pebble-le-test
   entryclass.h entryclass.cpp
   gattserver.h gattserver.cpp
   gattpacket.h gattpacket.cpp
+  packetreader.h packetreader.cpp
+  connectivity.h connectivity.cpp
   device/devicehandler.h device/devicehandler.cpp
   device/devicelocator.h device/devicelocator.cpp
   device/deviceservice.h device/deviceservice.cpp
-  device/dbuswatcher.h device/dbuswatcher.cpp
+  device/devicecharacteristic.h device/devicecharacteristic.cpp
 )
 target_link_libraries(pebble-le-test Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Bluetooth ${DBUS_LIBRARIES})
 

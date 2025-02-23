@@ -12,6 +12,7 @@ Q_DECLARE_METATYPE(InterfaceList)
 
 class DBusWatcher;
 class DeviceHandler;
+class DeviceService;
 
 class DeviceLocator : public QObject
 {
@@ -24,22 +25,26 @@ public:
     void startDiscovery();
     void stopDiscovery();
 
-    inline QObject *getSender() {
-        return this->sender();
-    }
+    void removeDevice(const QString &path);
 
 signals:
     void deviceAdded(DeviceHandler *device);
+    void deviceRemoved(const QString &path);
 
 public slots:
-    void handleBusSocketActivated();
+    void handleInterfacesAdded(const QDBusObjectPath &path, InterfaceList list);
+    void handleInterfacesRemoved(const QDBusObjectPath &path, QStringList list);
 
 // Member variables
 private:
+    void parsePairedDevices();
+
     QDBusInterface *m_iface, *m_discoveryIface;
     QString m_device; // Bluetooth HCI device, like /org/bluez/hci0
     QString m_filter;
-    DBusWatcher* const watcher;
+
+	QHash<QString, DeviceHandler*> m_devices;
+	QHash<QString, DeviceService*> m_services;
 };
 
 #endif // DEVICELOCATOR_H

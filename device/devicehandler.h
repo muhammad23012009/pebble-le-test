@@ -3,7 +3,9 @@
 
 #include <QObject>
 #include <QDBusInterface>
+#include <QTimer>
 #include <QPointer>
+#include <QMetaMethod>
 
 class DeviceService;
 
@@ -18,6 +20,7 @@ public:
     void disconnectFromDevice();
     void pair() const;
 
+    QString path() const;
     QString name() const;
     QString address() const;
 
@@ -28,7 +31,7 @@ public:
     bool hasService(QString serviceUuid) const;
     bool hasServices() const;
 
-    DeviceService *getService(QString serviceUuid);
+    void getService(const QString& serviceUuid, QObject *obj, const QString& method);
 
     // Called by dbus watcher
     void serviceDiscovered(DeviceService *service);
@@ -43,10 +46,19 @@ private slots:
 
 private:
     QDBusInterface *m_iface;
+    QString m_path;
     QVariantMap m_info;
+    QTimer *m_reconnectTimer;
 
     // Each service is associated with a UUID
     QHash<QString, DeviceService*> m_services;
+
+    class Callback {
+    public:
+        QPointer<QObject> obj;
+        QString method;
+    };
+    QMap<QString, Callback> m_callbacks;
 
     bool m_connected = false;
     bool m_paired = false;

@@ -5,7 +5,12 @@
             "includePath": [
                 "${default}",
                 "/usr/include/dbus-1.0",
-                "/usr/lib/dbus-1.0/include"
+                "/usr/lib/dbus-1.0/include",
+                "/usr/include/qt/QtCore",
+                "/usr/include/qt/QtDBus",
+                "/usr/include/qt",
+                "/usr/include/qt6/QtBluetooth",
+                "/usr/include/qt6"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",

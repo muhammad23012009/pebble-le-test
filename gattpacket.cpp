@@ -40,8 +40,11 @@ GATTPacket::GATTPacket(PacketType type, int sequence, QByteArray data):
     if (!data.isEmpty() && !data.isNull()) {
         m_data.append(data);
     }
+}
 
-    qDebug() << "prepared gatt packet" << m_data.toHex();
+GATTPacket::~GATTPacket()
+{
+    m_data.clear();
 }
 
 int GATTPacket::getMaxRxWindow() const

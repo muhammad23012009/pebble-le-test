@@ -42,6 +42,8 @@ public:
     GATTPacket(QByteArray data);
     GATTPacket(PacketType type, int sequence, QByteArray data);
 
+    ~GATTPacket();
+
     int getMaxRxWindow() const;
     int getMaxTxWindow() const;
 

@@ -13,6 +13,8 @@
 
 #include "gattpacket.h"
 
+class PacketReader;
+
 const QBluetoothUuid serviceUuid = QBluetoothUuid("10000000-328E-0FBB-C642-1AA6699BDADA");
 const QBluetoothUuid writeCharacteristic = QBluetoothUuid("10000001-328E-0FBB-C642-1AA6699BDADA");
 const QBluetoothUuid readCharacteristic = QBluetoothUuid("10000002-328E-0FBB-C642-1AA6699BDADA");
@@ -27,35 +29,49 @@ class GATTServer : public QObject
     Q_OBJECT
 
 public:
-    GATTServer();
-    void sendAck(int sequence);
+    GATTServer(PacketReader *reader);
     void sendDataToPebble();
 
 public slots:
     void run();
-    void writeToPebble(QByteArray value);
-    void processData(QByteArray data);
+    void sendAck(int sequence, bool forceAck = false);
+    void writeToPebble(const QByteArray &data);
 
 signals:
+    void connectedToPebble();
     void dataReceived(QByteArray data);
 
 private:
+    const int m_maxPacketSize = 335;
+
     int m_sequence = 0;
     int m_remoteSequence = 0;
+
+    int m_ackSequence = 0;
+
     inline int getNextSequence(int sequence) {
         return (sequence + 1) % 32;
     }
+
+    bool m_connectionOpened = false;
 
     int m_maxRxWindow = default_maxRxWindow;
     int m_maxTxWindow = default_maxTxWindow;
 
     QList<QByteArray> m_pendingPackets;
+    QList<QByteArray> m_pendingIncoming;
+    int m_sentPackets = 0;
+
     QHash<int, GATTPacket> m_pendingAcks;
 
     GATTPacket m_lastAck;
     PPoGATTVersion m_gattVersion;
 
     int m_rxPending = 0;
+
+    QTimer *m_timer;
+
+    PacketReader *m_packetReader;
 
     QLowEnergyController *m_leController;
     QLowEnergyService *m_service, *m_fakeService;

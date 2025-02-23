@@ -1,6 +1,7 @@
 #include "gattserver.h"
 #include "watchdatareader.h"
 #include "watchdatawriter.h"
+#include "packetreader.h"
 #include <QEventLoop>
 #include <QByteArray>
 
@@ -9,62 +10,21 @@
 #include <QTimer>
 #include <memory>
 
-GATTServer::GATTServer() {
-    QLoggingCategory::setFilterRules(QStringLiteral("qt.bluetooth* = true"));
-    connect(this, &GATTServer::dataReceived, this, &GATTServer::processData);
-}
-
-void GATTServer::processData(QByteArray data)
+GATTServer::GATTServer(PacketReader *reader):
+  m_packetReader(reader)
 {
-    WatchDataReader reader(data);
-    int length = reader.read<quint16>();
-    int endpoint = reader.read<quint16>();
-    qDebug() << "endpoint is" << endpoint;
-    if (endpoint == 17) {
-        QByteArray toSend;
-        WatchDataWriter writer(&toSend);
-        writer.writeLE<quint8>(0x01);        // ok
-        writer.writeLE<quint32>(0xFFFFFFFF); // deprecated since 3.0
-        writer.writeLE<quint32>(0);          // deprecated since 3.0
-        writer.write<quint32>(2);
-        writer.write<quint8>(2); // response version
-        writer.write<quint8>(4); // major version
-        writer.write<quint8>(4); // minor version
-        writer.write<quint8>(3); // bugfix version
-        writer.writeLE<quint64>(27055);
+    QLoggingCategory::setFilterRules(QStringLiteral("qt.bluetooth* = true"));
 
+    m_leController = QLowEnergyController::createPeripheral(this);
 
-        QByteArray finalData;
-        finalData.append((toSend.length() & 0xFF00) >> 8);
-        finalData.append(toSend.length() & 0xFF);
-        finalData.append((17 & 0xFF00) >> 8);
-        finalData.append(17 & 0xFF);
-        finalData.append(toSend);
-
-        writeToPebble(finalData);
-    } else if (endpoint == 49) {
-        reader.read<quint8>();
-        quint8 transaction = reader.read<quint8>();
-        QByteArray ba(2, Qt::Uninitialized);
-        ba[0] = 255;
-        ba[1] = transaction;
-
-        QByteArray finalData;
-        finalData.append((ba.length() & 0xFF00) >> 8);
-        finalData.append(ba.length() & 0xFF);
-        finalData.append((49 & 0xFF00) >> 8);
-        finalData.append(49 & 0xFF);
-        finalData.append(ba);
-
-        writeToPebble(finalData);
-    }
+    m_timer = new QTimer(this);
+    m_timer->setSingleShot(true);
+    connect(m_timer, &QTimer::timeout, [=]() { this->sendAck(-1, true); });
 }
 
 void GATTServer::run()
 {
     qDebug() << "GATT server started!";
-
-    m_leController = QLowEnergyController::createPeripheral();
 
     QLowEnergyServiceData serviceData;
     serviceData.setType(QLowEnergyServiceData::ServiceTypePrimary);
@@ -113,26 +73,31 @@ void GATTServer::run()
             m_service->writeCharacteristic(info, reset.data());
             qDebug() << "windows negotiated" << m_maxRxWindow << m_maxTxWindow;
 
+            m_packetReader->open(QIODevice::ReadWrite);
+            if (!m_connectionOpened) {
+                m_connectionOpened = true;
+                emit connectedToPebble();
+            }
+
         } else if (packet.type() == GATTPacket::ACK) {
             qDebug() << "Received ACK from watch" << packet.sequence();
-            qDebug() << "pending acks are" << m_pendingAcks.keys();
             m_pendingAcks.remove(packet.sequence());
+            m_sentPackets = m_sentPackets > 0 ? (m_sentPackets - 1) : 0;
 
             // Send all other packets
-            sendDataToPebble();
+            if (m_pendingPackets.length() > 0)
+                sendDataToPebble();
 
         } else if (packet.type() == GATTPacket::DATA) {
             qDebug() << "packet sequence is" << packet.sequence();
             qDebug() << "data is" << packet.data().toHex();
             if (m_remoteSequence == packet.sequence()) {
-                WatchDataReader reader(packet.data());
-                reader.skip(1);
-                QByteArray data = reader.readBytes(packet.data().length() - 1);
-
-                emit dataReceived(data);
+                QByteArray data = packet.data().remove(0, 1);
 
                 sendAck(packet.sequence());
                 m_remoteSequence = getNextSequence(m_remoteSequence);
+
+                m_packetReader->write(data);
             } else {
                 sendAck(m_lastAck.sequence());
             }
@@ -143,6 +108,7 @@ void GATTServer::run()
             m_remoteSequence = 0;
             m_pendingPackets.clear();
             m_pendingAcks.clear();
+            m_sentPackets = 0;
 
             GATTPacket reset(GATTPacket::RESET, 0, QByteArray(1, packet.version().version));
             m_service->writeCharacteristic(info, reset.data());
@@ -158,58 +124,82 @@ void GATTServer::run()
         }
     });
 
+    connect(m_leController, &QLowEnergyController::disconnected, [this, serviceData, fakeServiceData]() {
+        m_service = m_leController->addService(serviceData);
+        m_fakeService = m_leController->addService(fakeServiceData);
+
+        m_leController->startAdvertising(QLowEnergyAdvertisingParameters(), QLowEnergyAdvertisingData());
+    });
+
     m_leController->startAdvertising(QLowEnergyAdvertisingParameters(), QLowEnergyAdvertisingData());
 }
 
-void GATTServer::sendAck(int sequence)
+void GATTServer::sendAck(int sequence, bool forceAck)
 {
+    if (sequence == -1)
+        sequence = m_ackSequence;
+    else
+        m_ackSequence = sequence;
+
+    if (forceAck || m_timer->isActive())
+        m_timer->stop();
+
     GATTPacket ack(GATTPacket::ACK, sequence, QByteArray());
-    qDebug() << "do we have coalesced acking?" << m_gattVersion.supportsCoalescedAcking;
-    // Coalesced ACKing doesn't work right now
-//    if (!m_gattVersion.supportsCoalescedAcking) {
+    if (!m_gattVersion.supportsCoalescedAcking) {
         m_service->writeCharacteristic(m_service->characteristic(writeCharacteristic), ack.data());
         m_lastAck = ack;
-/*    } else {
+    } else {
         m_rxPending++;
-        if (m_rxPending >= m_maxRxWindow / 2) {
+        if ((m_rxPending >= m_maxRxWindow / 2) || forceAck) {
             m_rxPending = 0;
             m_service->writeCharacteristic(m_service->characteristic(writeCharacteristic), ack.data());
+            qDebug() << "Went ahead and wrote ACK with sequence" << sequence;
             m_lastAck = ack;
+        } else {
+            m_timer->start(200);
         }
-    }*/
+    }
 }
 
-void GATTServer::writeToPebble(QByteArray value)
+void GATTServer::writeToPebble(const QByteArray &data)
 {
-    qDebug() << "Writing data to pebble!" << value.toHex() << m_pendingPackets.length();
-    m_pendingPackets.append(value);
-    m_pendingAcks.insert(m_sequence, GATTPacket(value));
-    if (m_pendingPackets.length() == 1 && m_pendingAcks.size() == 1)
+    qDebug() << "Writing data to pebble!" << data.toHex() << m_pendingPackets.length();
+    m_pendingPackets.append(data);
+    m_pendingAcks.insert(m_sequence, GATTPacket(data));
+
+    if (m_pendingPackets.length() == 1 && m_pendingAcks.size() == 0)
         sendDataToPebble();
 }
 
 void GATTServer::sendDataToPebble()
 {
-    if (m_pendingPackets.length() < m_maxTxWindow) {
-        int maxPacketSize = 339 - 4;
-        QByteArray data;
-        while (data.length() < maxPacketSize) {
-            if (m_pendingPackets.isEmpty())
-                break;
+    while (m_pendingPackets.size() > 0) {
+        QByteArray data = m_pendingPackets.takeFirst();
+        WatchDataReader reader(data);
 
-            QByteArray packet = m_pendingPackets.takeFirst();
-
-            data.append(packet);
-        }
-
-        if (data.length() > 0) {
-            int bytesToSend = (data.length() > maxPacketSize ? maxPacketSize : data.length());
-            WatchDataReader reader(data);
-            QByteArray toSend = reader.readBytes(bytesToSend);
-            GATTPacket packet(GATTPacket::DATA, m_sequence, toSend);
+        do {
+            int bytesToSend = (reader.size() > m_maxPacketSize ? m_maxPacketSize : reader.size());
+            GATTPacket packet(GATTPacket::DATA, m_sequence, reader.readBytes(bytesToSend));
             m_service->writeCharacteristic(m_service->characteristic(writeCharacteristic), packet.data());
-            qDebug() << "wrote data with sequence" << m_sequence;
+
+            qDebug() << "wrote data with sequence" << m_sequence << bytesToSend;
             m_sequence = getNextSequence(m_sequence);
+            m_sentPackets++;
+
+            if (m_sentPackets >= m_maxTxWindow)
+                break;
+        } while (reader.size() != 0);
+
+        if (m_sentPackets >= m_maxTxWindow) {
+            // Add back the packet to our list so we can resume
+            qDebug() << "Exceeded in-flight packet window, remaining data is" << reader.size();
+            m_pendingPackets.prepend(reader.readBytes(reader.size()));
+            break;
         }
     }
+
+    if (m_sentPackets >= m_maxTxWindow)
+        return;
+    else if (m_pendingPackets.length() > 0)
+        sendDataToPebble();
 }
