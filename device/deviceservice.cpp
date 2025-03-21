@@ -39,7 +39,8 @@ DeviceCharacteristic *DeviceService::characteristic(const QString &uuid)
         for (auto it = reply.value().constBegin(), end = reply.value().constEnd(); it != end; ++it) {
             const QString path = it.key().path();
             if (path.startsWith(m_path + prefix) && it.value().contains("org.bluez.GattCharacteristic1")) {
-                addCharacteristic(path, it.value().value("org.bluez.GattCharacteristic1"));
+                DeviceCharacteristic *characteristic = new DeviceCharacteristic(path, it.value().value("org.bluez.GattCharacteristic1"), this);
+                addCharacteristic(characteristic);
             }
         }
 
@@ -54,11 +55,8 @@ DeviceCharacteristic *DeviceService::characteristic(const QString &uuid)
     return m_characteristics.value(uuid);
 }
 
-void DeviceService::addCharacteristic(QString path, const QVariantMap &properties)
+void DeviceService::addCharacteristic(DeviceCharacteristic *characteristic)
 {
-    if (!m_characteristics.contains(properties.value("UUID").toString())) {
-        DeviceCharacteristic *characteristic = new DeviceCharacteristic(path, properties, this);
-        m_characteristics.insert(properties.value("UUID").toString(), characteristic);
-        emit characteristicAdded(properties.value("UUID").toString());
-    }
+    m_characteristics.insert(characteristic->uuid(), characteristic);
+    emit characteristicAdded(characteristic->uuid());
 }

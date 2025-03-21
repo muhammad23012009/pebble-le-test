@@ -62,7 +62,7 @@ private:
     QList<QByteArray> m_pendingIncoming;
     int m_sentPackets = 0;
 
-    QHash<int, GATTPacket> m_pendingAcks;
+    QMap<int, GATTPacket> m_pendingAcks;
 
     GATTPacket m_lastAck;
     PPoGATTVersion m_gattVersion;

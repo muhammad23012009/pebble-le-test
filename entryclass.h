@@ -7,6 +7,10 @@
 #include <QLowEnergyService>
 #include <QIODevice>
 #include <QThreadPool>
+#include <QTimer>
+#include <QImage>
+#include <QDir>
+#include <QDateTime>
 
 #include "watchdatareader.h"
 
@@ -33,17 +37,33 @@ class EntryClass : public QObject
     Q_OBJECT
 
 public:
-    EntryClass(PacketReader *reader);
+    EntryClass(PacketReader *reader, GATTServer *server);
 
+    enum State {
+        StateNotInProgress,
+        StateWaitForToken,
+        StateInProgress,
+        StateCommit,
+        StateComplete
+    };
+    enum Command {
+        Init = 1,
+        Send,
+        Commit,
+        Abort,
+        Complete
+    };
 public slots:
     void addDevice(DeviceHandler *device);
     void removeDevice(const QString &path);
 
     void pairToPebble(DeviceService* service);
-    void connectedToPebble();
     void dataReceived();
+    void handleUpload(const QByteArray &data);
+    quint32 stm32crc(const QByteArray &buf, quint32 crc);
 
 signals:
+    void connected();
     void writeToPebble(const QByteArray &data);
 
 private:
@@ -52,11 +72,31 @@ private:
     DeviceHandler *m_handler;
     GATTServer *m_server;
     PacketReader *m_packetReader;
+    QTimer *aTimer;
+
+    int m_waitingForMore = 0;
+    int m_version, m_width, m_height;
+    QByteArray m_acc;
+
+    State m_state = StateNotInProgress;
+    quint8 m_stage = 1;
+    quint32 m_token = 0;
+    quint32 m_appId = 0;
+    QFile *uploadFile = nullptr;
+    quint32 m_remaining = 0;
+    quint32 m_crc = 0;
+
+    int m_resource_bytes = 0;
+    int m_fw_bytes = 0;
+
+    QDateTime m_startTime;
 
 private:
     Connectivity *m_connectivity;
 
     QByteArray pairTriggers(bool supportsPinningWithoutSlaveSecurity, bool belowLollipop, bool clientMode);
+
+    QByteArray encodeMessage(int endpoint, const QByteArray &data);
 
     template <std::size_t N>
     QByteArray boolArrayToBytes(std::array<bool, N> &arr) {

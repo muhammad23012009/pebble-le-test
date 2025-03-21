@@ -25,7 +25,7 @@ public:
     DeviceCharacteristic *characteristic(const QString &uuid);
 
     // Called by dbus watcher
-    void addCharacteristic(QString path, const QVariantMap &properties);
+    void addCharacteristic(DeviceCharacteristic *characteristic);
 
 signals:
     void characteristicAdded(QString uuid);

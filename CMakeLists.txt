@@ -11,8 +11,8 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core Bluetooth Concurrent)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Bluetooth Concurrent)
+find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core Bluetooth Concurrent Gui)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Bluetooth Concurrent Gui)
 
 find_package(PkgConfig REQUIRED) # Include functions provided by PkgConfig module.
 pkg_check_modules(DBUS REQUIRED dbus-1) # This calls pkgconfig with appropriate arguments
@@ -29,8 +29,10 @@ add_executable(pebble-le-test
   device/devicelocator.h device/devicelocator.cpp
   device/deviceservice.h device/deviceservice.cpp
   device/devicecharacteristic.h device/devicecharacteristic.cpp
+  device/devicedescriptor.h device/devicedescriptor.cpp
+  watchdatawriter.cpp
 )
-target_link_libraries(pebble-le-test Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Bluetooth ${DBUS_LIBRARIES})
+target_link_libraries(pebble-le-test Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Bluetooth Qt${QT_VERSION_MAJOR}::Gui ${DBUS_LIBRARIES})
 
 include(GNUInstallDirs)
 install(TARGETS pebble-le-test

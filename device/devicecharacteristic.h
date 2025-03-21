@@ -23,6 +23,8 @@ class DeviceCharacteristic : public QObject
 public:
     DeviceCharacteristic(const QString &path, const QVariantMap &properties, QObject *parent = nullptr);
 
+    QString uuid() const;
+
     QByteArray readCharacteristic();
     void writeCharacteristic(const QByteArray &data);
 

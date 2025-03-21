@@ -8,6 +8,11 @@ DeviceCharacteristic::DeviceCharacteristic(const QString &path, const QVariantMa
     QDBusConnection::systemBus().connect("org.bluez", path, "org.freedesktop.DBus.Properties", "PropertiesChanged", this, SLOT(propertiesChanged(QString, QVariantMap, QStringList)));
 }
 
+QString DeviceCharacteristic::uuid() const
+{
+    return m_properties.value("UUID").toString();
+}
+
 QByteArray DeviceCharacteristic::readCharacteristic()
 {
     QDBusReply<QByteArray> reply = m_iface->call("ReadValue", QVariantMap());

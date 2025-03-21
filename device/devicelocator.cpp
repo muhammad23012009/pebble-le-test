@@ -1,6 +1,8 @@
 #include "devicelocator.h"
 #include "devicehandler.h"
 #include "deviceservice.h"
+#include "devicecharacteristic.h"
+#include "devicedescriptor.h"
 #include <QLoggingCategory>
 #include <QDBusMetaType>
 #include <future>
@@ -88,8 +90,18 @@ void DeviceLocator::handleInterfacesAdded(const QDBusObjectPath &path, Interface
         properties = list.value("org.bluez.GattCharacteristic1");
         QString servicePath = qvariant_cast<QDBusObjectPath>(properties.value("Service")).path();
 		if (m_services.contains(servicePath)) {
-			m_services.value(servicePath)->addCharacteristic(path.path(), properties);
+            DeviceCharacteristic *characteristic = new DeviceCharacteristic(path.path(), properties, m_services.value(servicePath));
+			m_services.value(servicePath)->addCharacteristic(characteristic);
+            m_characteristics.insert(path.path(), characteristic);
 		}
+    }
+
+    if (list.contains("org.bluez.GattDescriptor1")) {
+        properties = list.value("org.bluez.GattDescriptor1");
+        QString characteristicPath = qvariant_cast<QDBusObjectPath>(properties.value("Characteristic")).path();
+        if (m_characteristics.contains(characteristicPath)) {
+            DeviceDescriptor *descriptor = new DeviceDescriptor(path.path(), properties, m_characteristics.value(characteristicPath));
+        }
     }
 }
 

@@ -6,8 +6,7 @@
 // Follow the QIODevice API as that's the easiest one
 
 PacketReader::PacketReader():
-  m_data(QByteArray()),
-  QIODevice()
+  m_data(QByteArray())
 {
 }
 
@@ -23,7 +22,6 @@ bool PacketReader::isSequential() const
 
 qint64 PacketReader::readData(char* data, qint64 maxSize)
 {
-    qDebug() << "WAO WAO WAO WE CALLED?" << maxSize << m_data.length();
     if (m_data.length() == 0 || maxSize <= 0)
         return -1;
 
@@ -31,7 +29,6 @@ qint64 PacketReader::readData(char* data, qint64 maxSize)
     memcpy(data, m_data.constData(), maxSize);
     m_data.remove(0, maxSize);
 
-    qDebug() << "readData() called!" << maxSize;
     return maxSize;
 }
 

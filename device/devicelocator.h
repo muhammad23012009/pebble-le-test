@@ -13,6 +13,8 @@ Q_DECLARE_METATYPE(InterfaceList)
 class DBusWatcher;
 class DeviceHandler;
 class DeviceService;
+class DeviceCharacteristic;
+class DeviceDescriptor;
 
 class DeviceLocator : public QObject
 {
@@ -45,6 +47,7 @@ private:
 
 	QHash<QString, DeviceHandler*> m_devices;
 	QHash<QString, DeviceService*> m_services;
+    QHash<QString, DeviceCharacteristic*> m_characteristics;
 };
 
 #endif // DEVICELOCATOR_H

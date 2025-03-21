@@ -66,8 +66,8 @@ void GATTServer::run()
 
             QByteArray resetData;
             if (m_gattVersion.supportsWindowNegotiation) {
-                resetData.append(m_maxRxWindow);
-                resetData.append(m_maxTxWindow);
+                resetData.append(25);
+                resetData.append(25);
             }
             GATTPacket reset(GATTPacket::RESET_ACK, 0, resetData);
             m_service->writeCharacteristic(info, reset.data());
@@ -80,9 +80,12 @@ void GATTServer::run()
             }
 
         } else if (packet.type() == GATTPacket::ACK) {
-            qDebug() << "Received ACK from watch" << packet.sequence();
-            m_pendingAcks.remove(packet.sequence());
-            m_sentPackets = m_sentPackets > 0 ? (m_sentPackets - 1) : 0;
+            // TODO: make this faster somehow, needs more optimization
+            //qDebug() << "Received ACK from watch" << packet.sequence();
+            for (int i = 0; i <= packet.sequence(); i++) {
+                m_sentPackets = m_sentPackets > 0 ? (m_sentPackets - 1) : 0;
+                m_pendingAcks.remove(i);
+            }
 
             // Send all other packets
             if (m_pendingPackets.length() > 0)
@@ -116,12 +119,18 @@ void GATTServer::run()
             m_gattVersion = packet.version();
             QByteArray resetData;
             if (m_gattVersion.supportsWindowNegotiation) {
-                resetData.append(m_maxRxWindow);
-                resetData.append(m_maxTxWindow);
+                /*resetData.append(m_maxRxWindow);
+                resetData.append(m_maxTxWindow);*/
+                resetData.append(25);
+                resetData.append(25);
             }
             reset = GATTPacket(GATTPacket::RESET_ACK, 0, resetData);
             m_service->writeCharacteristic(info, reset.data());
         }
+    });
+
+    connect(m_service, &QLowEnergyService::descriptorWritten, [this](const QLowEnergyDescriptor &desc, const QByteArray &data) {
+        qDebug() << "well shit guys" << desc.uuid() << data.toHex();
     });
 
     connect(m_leController, &QLowEnergyController::disconnected, [this, serviceData, fakeServiceData]() {
@@ -131,7 +140,13 @@ void GATTServer::run()
         m_leController->startAdvertising(QLowEnergyAdvertisingParameters(), QLowEnergyAdvertisingData());
     });
 
-    m_leController->startAdvertising(QLowEnergyAdvertisingParameters(), QLowEnergyAdvertisingData());
+    QLowEnergyAdvertisingData data;
+    data.setDiscoverability(QLowEnergyAdvertisingData::DiscoverabilityGeneral);
+    data.setServices(QList<QBluetoothUuid>() << serviceUuid << fakeServiceUuid);
+    QLowEnergyAdvertisingParameters params;
+    params.setMode(QLowEnergyAdvertisingParameters::AdvInd);
+    params.setInterval(1, 10);
+    m_leController->startAdvertising(params, QLowEnergyAdvertisingData());
 }
 
 void GATTServer::sendAck(int sequence, bool forceAck)
@@ -163,37 +178,36 @@ void GATTServer::sendAck(int sequence, bool forceAck)
 
 void GATTServer::writeToPebble(const QByteArray &data)
 {
-    qDebug() << "Writing data to pebble!" << data.toHex() << m_pendingPackets.length();
+    qDebug() << "Writing data to pebble!" << m_sequence << m_pendingPackets.length();
     m_pendingPackets.append(data);
     m_pendingAcks.insert(m_sequence, GATTPacket(data));
 
-    if (m_pendingPackets.length() == 1 && m_pendingAcks.size() == 0)
+    if (m_pendingPackets.length() <= 1 && m_pendingAcks.size() <= m_maxRxWindow)
         sendDataToPebble();
 }
 
 void GATTServer::sendDataToPebble()
 {
-    while (m_pendingPackets.size() > 0) {
+    while (m_pendingPackets.size() != 0) {
         QByteArray data = m_pendingPackets.takeFirst();
         WatchDataReader reader(data);
 
         do {
+            if (m_sentPackets >= m_maxTxWindow)
+                break;
+
             int bytesToSend = (reader.size() > m_maxPacketSize ? m_maxPacketSize : reader.size());
             GATTPacket packet(GATTPacket::DATA, m_sequence, reader.readBytes(bytesToSend));
             m_service->writeCharacteristic(m_service->characteristic(writeCharacteristic), packet.data());
 
-            qDebug() << "wrote data with sequence" << m_sequence << bytesToSend;
             m_sequence = getNextSequence(m_sequence);
             m_sentPackets++;
-
-            if (m_sentPackets >= m_maxTxWindow)
-                break;
         } while (reader.size() != 0);
 
         if (m_sentPackets >= m_maxTxWindow) {
             // Add back the packet to our list so we can resume
-            qDebug() << "Exceeded in-flight packet window, remaining data is" << reader.size();
-            m_pendingPackets.prepend(reader.readBytes(reader.size()));
+            if (reader.size() > 0)
+                m_pendingPackets.prepend(reader.readBytes(reader.size()));
             break;
         }
     }
